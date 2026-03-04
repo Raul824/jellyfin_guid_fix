@@ -1,0 +1,41 @@
+#!/usr/bin/bash
+tbl="$1"
+if [[ "$tbl" == "" ]]; then
+echo "Provide Table Name"
+exit 666
+fi
+
+if [[ -f "$PWD/recov.db" ]]; then
+echo "recov.db found"
+else
+echo "Create a copy of jellyfin.db to recov.db"
+exit 666
+fi
+
+glb="NOT GLOB '[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]-[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'"
+
+#or_clause=`sqlite3 "$PWD/recov.db"  ".schema $tbl" | grep Id | grep TEXT | awk -v glb="$glb" -F '"' '{print $2 " "glb " OR"}' | tr '\n' ' ' | sed 's/ OR $//'`
+#echo "$or_clause"
+
+uid_colf=`sqlite3 "$PWD/recov.db"  ".schema ${tbl}" | grep Id | grep TEXT | awk -F'"' '{print $2" ;sqlite3 recov.db \"SELECT MAX(LENGTH("$2")) FROM BaseItems\""}'`
+#echo "$uid_colf"
+qry="SELECT "
+where="WHERE "
+while read line; 
+do
+        if [[ $(eval `echo $line | cut -d';' -f2`) == "36" ]];then
+                qry+="$(echo $line | cut -d';' -f1) ,"
+                where+=" $(echo $line | cut -d';' -f1) ${glb} OR"
+        fi
+done <<< "${uid_colf}"
+fin_qry="$(echo $qry | sed 's/,$//') FROM ${tbl} $(echo $where | sed 's/OR$//')"
+echo $fin_qry
+#qry="SELECT * FROM ${tbl} WHERE ${or_clause}"
+#echo "$qry"
+sqlite3 "$PWD/recov.db" "${fin_qry}"
+
+echo "To delete above records enter y" 
+read response
+if [[ ${response} = "y" ]];then
+sqlite3 "$PWD/recov.db" "DELETE FROM ${tbl} $(echo $where | sed 's/OR$//')"
+fi
